@@ -111,7 +111,9 @@ async fn fetch_range(
 
     let mut writer = BufWriter::new(out_file);
     writer.seek(SeekFrom::Start(range.start)).await?;
+
     info!(logger, "fetching"; "range" => &range);
+
     let mut headers = HeaderMap::new();
     headers.insert(
         RANGE,
@@ -169,6 +171,7 @@ async fn fetch_range(
     }
 
     writer.flush().await?;
+
     info!(logger, "written"; "range" => &range, "path" => format!("{:?}", &path));
 
     Ok(())

@@ -61,7 +61,6 @@ pub fn parse_path(output_option: Option<String>, url: &str) -> Result<PathBuf, B
 /// and returns a Vec<Range> which covers the content_length and where result.len() ==
 /// num_fetches
 pub fn create_ranges(content_length: u64, num_fetches: u64) -> Result<Vec<Range>, Box<dyn Error>> {
-
     if num_fetches == 0 {
         return Err(Box::new(FetchError::InvalidArgumentsError(
             "Number of fetches must be greater than zero".to_owned(),
@@ -103,36 +102,24 @@ mod tests {
     fn range_with_2_chunks() {
         let ranges = create_ranges(100, 2).unwrap();
 
-        assert_eq!(ranges, vec![
-            Range {
-                start: 0,
-                end: 49
-            },
-            Range {
-                start: 50,
-                end: 99
-            }
-        ]);
+        assert_eq!(
+            ranges,
+            vec![Range { start: 0, end: 49 }, Range { start: 50, end: 99 }]
+        );
     }
 
     #[test]
     fn range_with_uneven_chunks() {
         let ranges = create_ranges(10, 3).unwrap();
 
-        assert_eq!(ranges, vec![
-            Range {
-                start: 0,
-                end: 2
-            },
-            Range {
-                start: 3,
-                end: 5
-            },
-            Range {
-                start: 6,
-                end: 9
-            }
-        ]);
+        assert_eq!(
+            ranges,
+            vec![
+                Range { start: 0, end: 2 },
+                Range { start: 3, end: 5 },
+                Range { start: 6, end: 9 }
+            ]
+        );
     }
 
     #[test]
@@ -140,10 +127,7 @@ mod tests {
         let url = "https://test.com/big-image.jpg";
         let path = parse_path(None, url).unwrap();
 
-        assert_eq!(
-            path,
-            PathBuf::from("./big-image.jpg")
-        );
+        assert_eq!(path, PathBuf::from("./big-image.jpg"));
     }
 
     #[test]
@@ -151,10 +135,7 @@ mod tests {
         let url = "https://test.com/";
         let path = parse_path(None, url).unwrap();
 
-        assert_eq!(
-            path,
-            PathBuf::from("./index.html")
-        );
+        assert_eq!(path, PathBuf::from("./index.html"));
     }
 
     #[test]
@@ -173,10 +154,7 @@ mod tests {
         let output_option = Some("/tmp".to_owned());
         let path = parse_path(output_option, url).unwrap();
 
-        assert_eq!(
-            path,
-            PathBuf::from("/tmp/big-image.jpg")
-        );
+        assert_eq!(path, PathBuf::from("/tmp/big-image.jpg"));
     }
 
     #[test]
@@ -185,9 +163,6 @@ mod tests {
         let output_option = Some("/tmp/my-big-image.jpg".to_owned());
         let path = parse_path(output_option, url).unwrap();
 
-        assert_eq!(
-            path,
-            PathBuf::from("/tmp/my-big-image.jpg")
-        );
+        assert_eq!(path, PathBuf::from("/tmp/my-big-image.jpg"));
     }
 }
