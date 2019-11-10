@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 /// Errors during Fetch
 pub enum FetchError {
     /// An Error indicating an issue with Server Support

@@ -12,7 +12,7 @@ use slog::{self, info, Logger};
 use crate::errors::FetchError;
 use crate::utils::{create_ranges, parse_path};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 /// A range of bytes to fetch
 pub struct Range {
     /// The start of the range
@@ -78,7 +78,7 @@ pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
 
     let mut fetches = Vec::new();
 
-    let ranges = create_ranges(content_length, options.num_fetches);
+    let ranges = create_ranges(content_length, options.num_fetches)?;
     for range in ranges {
         fetches.push(fetch_range(
             &client,

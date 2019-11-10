@@ -60,8 +60,13 @@ pub fn parse_path(output_option: Option<String>, url: &str) -> Result<PathBuf, B
 /// Takes a content_length and num_fetches
 /// and returns a Vec<Range> which covers the content_length and where result.len() ==
 /// num_fetches
-/// TODO: "unit" test this
-pub fn create_ranges(content_length: u64, num_fetches: u64) -> Vec<Range> {
+pub fn create_ranges(content_length: u64, num_fetches: u64) -> Result<Vec<Range>, Box<dyn Error>> {
+
+    if num_fetches == 0 {
+        return Err(Box::new(FetchError::InvalidArgumentsError(
+            "Number of fetches must be greater than zero".to_owned(),
+        )));
+    }
     let mut cursor = 0;
     let mut ranges = Vec::new();
 
@@ -81,5 +86,108 @@ pub fn create_ranges(content_length: u64, num_fetches: u64) -> Vec<Range> {
         ranges.push(range);
     }
 
-    ranges
+    Ok(ranges)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn range_with_0_chunks() {
+        let ranges = create_ranges(100, 0);
+        assert!(ranges.is_err());
+    }
+
+    #[test]
+    fn range_with_2_chunks() {
+        let ranges = create_ranges(100, 2).unwrap();
+
+        assert_eq!(ranges, vec![
+            Range {
+                start: 0,
+                end: 49
+            },
+            Range {
+                start: 50,
+                end: 99
+            }
+        ]);
+    }
+
+    #[test]
+    fn range_with_uneven_chunks() {
+        let ranges = create_ranges(10, 3).unwrap();
+
+        assert_eq!(ranges, vec![
+            Range {
+                start: 0,
+                end: 2
+            },
+            Range {
+                start: 3,
+                end: 5
+            },
+            Range {
+                start: 6,
+                end: 9
+            }
+        ]);
+    }
+
+    #[test]
+    fn parse_path_with_none_output_option() {
+        let url = "https://test.com/big-image.jpg";
+        let path = parse_path(None, url).unwrap();
+
+        assert_eq!(
+            path,
+            PathBuf::from("./big-image.jpg")
+        );
+    }
+
+    #[test]
+    fn parse_path_with_none_output_option_and_no_url_filename() {
+        let url = "https://test.com/";
+        let path = parse_path(None, url).unwrap();
+
+        assert_eq!(
+            path,
+            PathBuf::from("./index.html")
+        );
+    }
+
+    #[test]
+    fn parse_path_with_non_existent_output_option_dir() {
+        let url = "https://test.com/";
+        // I posit this will never exist on a test environment
+        let output_option = Some("/tmp/fake/fake/fake/fake".to_owned());
+        let path = parse_path(output_option, url);
+
+        assert!(path.is_err());
+    }
+
+    #[test]
+    fn parse_path_with_output_option_dir() {
+        let url = "https://test.com/big-image.jpg";
+        let output_option = Some("/tmp".to_owned());
+        let path = parse_path(output_option, url).unwrap();
+
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/big-image.jpg")
+        );
+    }
+
+    #[test]
+    fn parse_path_with_output_option_file() {
+        let url = "https://test.com/big-image.jpg";
+        let output_option = Some("/tmp/my-big-image.jpg".to_owned());
+        let path = parse_path(output_option, url).unwrap();
+
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/my-big-image.jpg")
+        );
+    }
 }
