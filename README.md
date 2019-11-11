@@ -4,11 +4,11 @@
 Binaries for multiple platforms are available in `./bin`
 
 ### With cargo/rustup
-Install Rust according to [the directions](https://rustup.rs).
+Install nightly Rust according to [the directions](https://rustup.rs).
 
 In this directory, run:
 ```
-$ cargo build --release 
+$ cargo build --release
 ```
 
 ## Usage
@@ -29,3 +29,5 @@ $ cargo test
 
 ## Notes
 - ETag header is assumed to be md5 hex string
+- `async/.await` [just landed on stable](https://blog.rust-lang.org/2019/11/07/Async-await-stable.html), but some of the error handling still requires nightly
+- Parallel fetch requests *could* be retried on specific errors

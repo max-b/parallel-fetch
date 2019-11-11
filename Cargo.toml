@@ -3,6 +3,8 @@ name = "parallel-fetch"
 version = "0.1.0"
 authors = ["Max Bittman <bittmanmax@gmail.com>"]
 edition = "2018"
+description = "Parallel Fetch"
+readme = "README.md"
 
 [[bin]]
 name = "parallel-fetch"
