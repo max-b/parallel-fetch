@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use async_std::fs::OpenOptions;
-use async_std::io::prelude::*;
-use async_std::io::{BufWriter, SeekFrom};
 use futures_util::future::try_join_all;
 use reqwest::header::{HeaderMap, ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, RANGE};
 use reqwest::StatusCode;
 use slog::{self, info, Logger};
+use std::fs::OpenOptions;
+use std::io::prelude::*;
+use std::io::{BufWriter, SeekFrom};
 
 use crate::errors::{FetchError, Result};
 use crate::utils::{check_etag, create_ranges, parse_path};
@@ -171,14 +171,10 @@ async fn fetch_range(
     total_length: u64,
     logger: &Logger,
 ) -> Result<()> {
-    let out_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(path)
-        .await?;
+    let out_file = OpenOptions::new().create(true).write(true).open(path)?;
 
     let mut writer = BufWriter::new(out_file);
-    writer.seek(SeekFrom::Start(range.start)).await?;
+    writer.seek(SeekFrom::Start(range.start))?;
 
     info!(logger, "fetching"; "range" => &range);
 
@@ -246,10 +242,10 @@ async fn fetch_range(
     }
 
     while let Some(chunk) = res.chunk().await? {
-        writer.write(&chunk).await?;
+        writer.write(&chunk)?;
     }
 
-    writer.flush().await?;
+    writer.flush()?;
 
     info!(logger, "written"; "range" => &range, "path" => format!("{:?}", &path));
 
