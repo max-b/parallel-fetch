@@ -34,6 +34,7 @@ async fn accept_ranges_none() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -62,6 +63,7 @@ async fn accept_ranges_missing() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -93,6 +95,7 @@ async fn content_length_missing() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -136,6 +139,7 @@ async fn single_fetch() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -184,6 +188,7 @@ async fn second_fetch_fails() {
         num_fetches: 2,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -236,6 +241,7 @@ async fn two_fetches() {
         num_fetches: 2,
         logger: logger.clone(),
         check_etag: false,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -247,6 +253,64 @@ async fn two_fetches() {
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "HelloWorld");
+}
+
+#[tokio::test]
+async fn second_fetch_retries() {
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+    let mut temp_file_path = PathBuf::from(temp_dir.path());
+    temp_file_path.push("out.tmp");
+
+    let url = &mockito::server_url();
+
+    let logger = NullLoggerBuilder.build().unwrap();
+
+    let _head_mock = mockito::mock("HEAD", "/")
+        .with_status(200)
+        .with_header("accept-ranges", "bytes")
+        .with_header("content-length", "10")
+        .create();
+
+    let _body_mock = mockito::mock("GET", "/")
+        .with_status(206)
+        .match_header("range", "bytes=0-4")
+        .with_header("content-length", "5")
+        .with_header("content-range", "bytes 0-4/10")
+        .with_body(&b"Hello")
+        .create();
+
+    let _body_mock2 = mockito::mock("GET", "/")
+        .with_status(500)
+        .match_header("range", "bytes=5-9")
+        .with_header("content-length", "5")
+        .with_header("content-range", "bytes 5-9/10")
+        .expect(2)
+        .create();
+
+    let options = FetchOptions {
+        url: url.to_owned(),
+        output_option: Some(temp_file_path.to_str().unwrap().to_owned()),
+        num_fetches: 2,
+        logger: logger.clone(),
+        check_etag: false,
+        max_retries: 2,
+    };
+
+    let result = fetch(options).await;
+    debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
+
+    _body_mock.assert();
+    _body_mock2.assert();
+
+    assert!(result.is_err());
+
+    let error = result.expect_err("testing");
+
+    if let FetchError::ReqwestError(error) = *error {
+        assert_eq!(error.status(), Some(StatusCode::INTERNAL_SERVER_ERROR));
+    } else {
+        panic!("Expected ReqwestError");
+    }
 }
 
 #[tokio::test]
@@ -283,6 +347,7 @@ async fn check_etag_success() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: true,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;
@@ -326,6 +391,7 @@ async fn check_etag_failure() {
         num_fetches: 1,
         logger: logger.clone(),
         check_etag: true,
+        max_retries: 1,
     };
 
     let result = fetch(options).await;

@@ -11,7 +11,7 @@ use slog::{self, info, Logger};
 use crate::errors::{FetchError, Result};
 use crate::utils::{check_etag, create_ranges, parse_path};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 /// A range of bytes to fetch
 pub struct Range {
     /// The start of the range
@@ -44,6 +44,8 @@ pub struct FetchOptions {
     pub logger: Logger,
     /// Whether to attempt to check an etag for validation
     pub check_etag: bool,
+    /// The number of times to attempt to retry a failed chunk fetch
+    pub max_retries: u64,
 }
 
 /// Fetch a url which accepts range requests w/ parallel requests
@@ -80,6 +82,7 @@ pub async fn fetch(options: FetchOptions) -> Result<()> {
             ))
         })?;
 
+    info!(options.logger, "head";"content_length" => content_length, "etag" => format!("{:?}", &etag_header_option));
     info!(options.logger, "head"; "accept_ranges" => format!("{:?}", &accept_ranges), "content_length" => content_length, "etag" => format!("{:?}", &etag_header_option));
 
     if accept_ranges == "none" {
@@ -92,13 +95,14 @@ pub async fn fetch(options: FetchOptions) -> Result<()> {
 
     let ranges = create_ranges(content_length, options.num_fetches)?;
     for range in ranges {
-        fetches.push(fetch_range(
+        fetches.push(fetch_retryer(
             &client,
             &options.url,
             range,
             &path,
             content_length,
             &options.logger,
+            options.max_retries,
         ));
     }
 
@@ -114,6 +118,48 @@ pub async fn fetch(options: FetchOptions) -> Result<()> {
         }
     } else {
         Ok(())
+    }
+}
+
+async fn fetch_retryer(
+    client: &reqwest::Client,
+    url: &str,
+    range: Range,
+    path: &PathBuf,
+    total_length: u64,
+    logger: &Logger,
+    max_retries: u64,
+) -> Result<()> {
+    let mut attempts = 0;
+
+    if max_retries == 0 {
+        return Err(Box::new(FetchError::InvalidArgumentsError(
+            "Number of max-retries must be greater than zero".to_owned(),
+        )));
+    }
+
+    loop {
+        let result = fetch_range(&client, &url, range, &path, total_length, &logger).await;
+
+        if let Err(error) = result {
+            if let FetchError::ReqwestError(error) = *error {
+                attempts += 1;
+                if let Some(status) = error.status() {
+                    if status.is_client_error() {
+                        return Err(Box::new(FetchError::ReqwestError(error)));
+                    }
+                }
+                if attempts >= max_retries {
+                    return Err(Box::new(FetchError::ReqwestError(error)));
+                } else {
+                    info!(logger, "retrying"; "attempts" => attempts, "max_retries" => max_retries);
+                }
+            } else {
+                return Err(error);
+            }
+        } else {
+            return result;
+        }
     }
 }
 
@@ -183,7 +229,9 @@ async fn fetch_range(
             ))
         })?;
 
-    info!(logger, "received"; "range" => &range, "content_range" => &content_range, "content_length" => content_length, "status" => format!("{}", res.status()));
+    let etag = res_headers.get(ETAG);
+
+    info!(logger, "received"; "range" => &range, "content_range" => &content_range, "content_length" => content_length, "etag" => format!("{:?}", &etag), "status" => format!("{}", res.status()));
 
     if content_range != format!("bytes {}-{}/{}", range.start, range.end, total_length) {
         return Err(Box::new(FetchError::ServerSupportError(

@@ -41,6 +41,13 @@ pub async fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("max-retries")
+                .short("r")
+                .long("max-retries")
+                .help("the number of retry attempts to make on failed chunk downloads, defaults to 5")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("check-etag")
                 .short("c")
                 .long("check-etag")
@@ -55,12 +62,15 @@ pub async fn main() -> Result<()> {
 
     let num_fetches = value_t!(matches.value_of("fetches"), u64).unwrap_or(10);
 
+    let max_retries = value_t!(matches.value_of("max-retries"), u64).unwrap_or(5);
+
     let options = FetchOptions {
         url,
         output_option,
         num_fetches,
         logger: logger.clone(),
         check_etag: matches.is_present("check-etag"),
+        max_retries,
     };
 
     match fetch(options).await {
