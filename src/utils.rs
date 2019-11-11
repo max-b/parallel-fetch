@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -6,17 +5,22 @@ use hex;
 use md5::{Digest, Md5};
 use reqwest::Url;
 
-use crate::errors::FetchError;
+use crate::errors::{FetchError, Result};
 use crate::fetch::Range;
 
 /// Check a ETag in the form of a md5 hash hex string
 /// against a file at path location
-pub fn check_etag(etag: &str, path: &PathBuf) -> Result<(), Box<dyn Error>> {
+pub fn check_etag(etag: &str, path: &PathBuf) -> Result<()> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Md5::new();
     let _n = io::copy(&mut file, &mut hasher)?;
     let hash = hasher.result();
-    if &hex::decode(&etag)?[..] == &hash[..] {
+    let etag_bytes = hex::decode(&etag).map_err(|_| {
+        Box::new(FetchError::ServerSupportError(
+            "Server returned ETag which could not be parsed into bytes".to_owned(),
+        ))
+    })?;
+    if etag_bytes[..] == hash[..] {
         Ok(())
     } else {
         Err(Box::new(FetchError::ValidationError(
@@ -27,7 +31,7 @@ pub fn check_etag(etag: &str, path: &PathBuf) -> Result<(), Box<dyn Error>> {
 
 /// Takes an optional output and a url to download from
 /// and returns an output path to write to
-pub fn parse_path(output_option: &Option<String>, url: &str) -> Result<PathBuf, Box<dyn Error>> {
+pub fn parse_path(output_option: &Option<String>, url: &str) -> Result<PathBuf> {
     let parsed_url = Url::parse(url).unwrap();
 
     let segments = parsed_url.path_segments();
@@ -79,7 +83,7 @@ pub fn parse_path(output_option: &Option<String>, url: &str) -> Result<PathBuf, 
 /// Takes a content_length and num_fetches
 /// and returns a Vec<Range> which covers the content_length and where result.len() ==
 /// num_fetches
-pub fn create_ranges(content_length: u64, num_fetches: u64) -> Result<Vec<Range>, Box<dyn Error>> {
+pub fn create_ranges(content_length: u64, num_fetches: u64) -> Result<Vec<Range>> {
     if num_fetches == 0 {
         return Err(Box::new(FetchError::InvalidArgumentsError(
             "Number of fetches must be greater than zero".to_owned(),
@@ -115,10 +119,12 @@ mod tests {
     fn range_with_0_chunks() {
         let ranges = create_ranges(100, 0);
         let error = ranges.expect_err("testing");
-        assert_eq!(
-            error.description(),
-            "Number of fetches must be greater than zero".to_owned(),
-        );
+
+        if let FetchError::InvalidArgumentsError(msg) = *error {
+            assert_eq!("Number of fetches must be greater than zero", msg);
+        } else {
+            panic!("Expected InvalidArgumentsError");
+        }
     }
 
     #[test]
@@ -169,7 +175,12 @@ mod tests {
         let path = parse_path(&output_option, url);
 
         let error = path.expect_err("testing");
-        assert_eq!(error.description(), "Output argument invalid".to_owned(),);
+
+        if let FetchError::InvalidArgumentsError(msg) = *error {
+            assert_eq!("Output argument invalid", msg);
+        } else {
+            panic!("Expected InvalidArgumentsError");
+        }
     }
 
     #[test]

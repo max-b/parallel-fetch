@@ -1,15 +1,13 @@
-use std::error::Error;
-
 use clap::{value_t, App, Arg};
 use slog::{error, info};
 use sloggers::terminal::TerminalLoggerBuilder;
 use sloggers::types::Severity;
 use sloggers::Build;
 
-use parallel_fetch::{fetch, FetchOptions};
+use parallel_fetch::{fetch, FetchOptions, Result};
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn Error>> {
+pub async fn main() -> Result<()> {
     let mut builder = TerminalLoggerBuilder::new();
     builder.level(Severity::Info);
 
@@ -71,7 +69,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         Err(err) => {
-            error!(logger, "download failed"; "error" => err.description());
+            error!(logger, "download failed"; "error" => format!("{:?}", &err));
             Err(err)
         }
     }

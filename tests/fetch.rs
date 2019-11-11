@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use hex;
 use md5::{Digest, Md5};
 use mockito;
+use reqwest::StatusCode;
 use slog::debug;
 use sloggers::null::NullLoggerBuilder;
 use sloggers::terminal::TerminalLoggerBuilder;
@@ -13,7 +14,7 @@ use sloggers::Build;
 use tempfile::TempDir;
 use tokio;
 
-use parallel_fetch::{fetch, FetchOptions};
+use parallel_fetch::{fetch, FetchError, FetchOptions};
 
 #[tokio::test]
 async fn accept_ranges_none() {
@@ -39,12 +40,12 @@ async fn accept_ranges_none() {
     debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
 
     let error = result.expect_err("testing");
-    // Kind of silly error checking - would be nice to actually leverage
-    // the type system, but difficult with Box<dyn Error>
-    assert_eq!(
-        "Server's Accept-Ranges header set to none",
-        error.description(),
-    );
+
+    if let FetchError::ServerSupportError(msg) = *error {
+        assert_eq!("Server's Accept-Ranges header set to none", msg);
+    } else {
+        panic!("Expected ServerSupportError");
+    }
 }
 
 #[tokio::test]
@@ -67,12 +68,12 @@ async fn accept_ranges_missing() {
     debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
 
     let error = result.expect_err("testing");
-    // Kind of silly error checking - would be nice to actually leverage
-    // the type system, but difficult with Box<dyn Error>
-    assert_eq!(
-        "Server does not include Accept-Ranges header",
-        error.description(),
-    );
+
+    if let FetchError::ServerSupportError(msg) = *error {
+        assert_eq!("Server does not include Accept-Ranges header", msg);
+    } else {
+        panic!("Expected ServerSupportError");
+    }
 }
 
 #[tokio::test]
@@ -98,12 +99,12 @@ async fn content_length_missing() {
     debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
 
     let error = result.expect_err("testing");
-    // Kind of silly error checking - would be nice to actually leverage
-    // the type system, but difficult with Box<dyn Error>
-    assert_eq!(
-        "Server does not include Content-Length header",
-        error.description(),
-    );
+
+    if let FetchError::ServerSupportError(msg) = *error {
+        assert_eq!("Server does not include Content-Length header", msg);
+    } else {
+        panic!("Expected ServerSupportError");
+    }
 }
 
 #[tokio::test]
@@ -189,9 +190,12 @@ async fn second_fetch_fails() {
     debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
 
     let error = result.expect_err("testing");
-    // Kind of silly error checking - would be nice to actually leverage
-    // the type system, but difficult with Box<dyn Error>
-    assert!(format!("{}", error).contains("500 Internal Server Error"),);
+
+    if let FetchError::ReqwestError(error) = *error {
+        assert_eq!(error.status(), Some(StatusCode::INTERNAL_SERVER_ERROR));
+    } else {
+        panic!("Expected ReqwestError");
+    }
 }
 
 #[tokio::test]
@@ -328,7 +332,10 @@ async fn check_etag_failure() {
     debug!(logger, "fetch finished"; "result" => format!("{:?}", &result));
 
     let error = result.expect_err("testing");
-    // Kind of silly error checking - would be nice to actually leverage
-    // the type system, but difficult with Box<dyn Error>
-    assert_eq!("ETag does not match", error.description(),);
+
+    if let FetchError::ValidationError(msg) = *error {
+        assert_eq!("ETag does not match", msg);
+    } else {
+        panic!("Expected ValidationError");
+    }
 }

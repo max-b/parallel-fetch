@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::path::PathBuf;
 
 use async_std::fs::OpenOptions;
@@ -9,7 +8,7 @@ use reqwest::header::{HeaderMap, ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, E
 use reqwest::StatusCode;
 use slog::{self, info, Logger};
 
-use crate::errors::FetchError;
+use crate::errors::{FetchError, Result};
 use crate::utils::{check_etag, create_ranges, parse_path};
 
 #[derive(Debug, PartialEq)]
@@ -48,7 +47,7 @@ pub struct FetchOptions {
 }
 
 /// Fetch a url which accepts range requests w/ parallel requests
-pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
+pub async fn fetch(options: FetchOptions) -> Result<()> {
     let path = parse_path(&options.output_option, &options.url)?;
 
     info!(options.logger, "fetching"; "options" => format!("{:?}", &options));
@@ -60,20 +59,26 @@ pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
 
     let etag_header_option = headers.get(ETAG);
 
-    let accept_ranges =
-        headers
-            .get(ACCEPT_RANGES)
-            .ok_or(Box::new(FetchError::ServerSupportError(
-                "Server does not include Accept-Ranges header".to_owned(),
-            )))?;
+    let accept_ranges = headers.get(ACCEPT_RANGES).ok_or_else(|| {
+        Box::new(FetchError::ServerSupportError(
+            "Server does not include Accept-Ranges header".to_owned(),
+        ))
+    })?;
 
     let content_length = headers
         .get(CONTENT_LENGTH)
-        .ok_or(Box::new(FetchError::ServerSupportError(
-            "Server does not include Content-Length header".to_owned(),
-        )))?
+        .ok_or_else(|| {
+            Box::new(FetchError::ServerSupportError(
+                "Server does not include Content-Length header".to_owned(),
+            ))
+        })?
         .to_str()?
-        .parse::<u64>()?;
+        .parse::<u64>()
+        .map_err(|_| {
+            Box::new(FetchError::ServerSupportError(
+                "Server returned Content-Length header that cannot be parsed to u64".to_owned(),
+            ))
+        })?;
 
     info!(options.logger, "head"; "accept_ranges" => format!("{:?}", &accept_ranges), "content_length" => content_length, "etag" => format!("{:?}", &etag_header_option));
 
@@ -119,7 +124,7 @@ async fn fetch_range(
     path: &PathBuf,
     total_length: u64,
     logger: &Logger,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     let out_file = OpenOptions::new()
         .create(true)
         .write(true)
@@ -156,18 +161,27 @@ async fn fetch_range(
 
     let content_range = res_headers
         .get(CONTENT_RANGE)
-        .ok_or(Box::new(FetchError::ServerSupportError(
-            "Range response did not include Content-Range header".to_owned(),
-        )))?
+        .ok_or_else(|| {
+            Box::new(FetchError::ServerSupportError(
+                "Range response did not include Content-Range header".to_owned(),
+            ))
+        })?
         .to_str()?;
 
     let content_length = res_headers
         .get(CONTENT_LENGTH)
-        .ok_or(Box::new(FetchError::ServerSupportError(
-            "Range response did not include Content-Length header".to_owned(),
-        )))?
+        .ok_or_else(|| {
+            Box::new(FetchError::ServerSupportError(
+                "Range response did not include Content-Length header".to_owned(),
+            ))
+        })?
         .to_str()?
-        .parse::<u64>()?;
+        .parse::<u64>()
+        .map_err(|_| {
+            Box::new(FetchError::ServerSupportError(
+                "Server returned Content-Length header that cannot be parsed to u64".to_owned(),
+            ))
+        })?;
 
     info!(logger, "received"; "range" => &range, "content_range" => &content_range, "content_length" => content_length, "status" => format!("{}", res.status()));
 
