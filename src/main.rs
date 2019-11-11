@@ -42,6 +42,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .help("the number of parallel fetches to execute, defaults to 10")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("check-etag")
+                .short("c")
+                .long("check-etag")
+                .help("whether to check the downloaded files md5 sum as a hex string against the server provided ETag")
+        )
         .get_matches();
 
     // unwrap is safe because url is required
@@ -56,6 +62,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         output_option,
         num_fetches,
         logger: logger.clone(),
+        check_etag: matches.is_present("check-etag"),
     };
 
     match fetch(options).await {

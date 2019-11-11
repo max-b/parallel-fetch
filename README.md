@@ -26,3 +26,6 @@ Assuming a functional rust environment, tests can be run with:
 ```
 $ cargo test
 ```
+
+## Notes
+- ETag header is assumed to be md5 hex string

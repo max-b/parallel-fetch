@@ -5,12 +5,12 @@ use async_std::fs::OpenOptions;
 use async_std::io::prelude::*;
 use async_std::io::{BufWriter, SeekFrom};
 use futures_util::future::try_join_all;
-use reqwest::header::{HeaderMap, ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, RANGE};
+use reqwest::header::{HeaderMap, ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, RANGE};
 use reqwest::StatusCode;
 use slog::{self, info, Logger};
 
 use crate::errors::FetchError;
-use crate::utils::{create_ranges, parse_path};
+use crate::utils::{check_etag, create_ranges, parse_path};
 
 #[derive(Debug, PartialEq)]
 /// A range of bytes to fetch
@@ -32,6 +32,7 @@ impl slog::Value for Range {
     }
 }
 
+#[derive(Debug)]
 /// Options for fetching
 pub struct FetchOptions {
     /// The url to fetch from
@@ -42,18 +43,22 @@ pub struct FetchOptions {
     pub num_fetches: u64,
     /// A logger
     pub logger: Logger,
+    /// Whether to attempt to check an etag for validation
+    pub check_etag: bool,
 }
 
 /// Fetch a url which accepts range requests w/ parallel requests
 pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
-    let path = parse_path(options.output_option, &options.url)?;
+    let path = parse_path(&options.output_option, &options.url)?;
 
-    info!(options.logger, "fetching"; "path" => format!("{:?}", &path));
+    info!(options.logger, "fetching"; "options" => format!("{:?}", &options));
 
     let client = reqwest::Client::new();
     let head = client.head(&options.url).send().await?.error_for_status()?;
 
     let headers = head.headers();
+
+    let etag_header_option = headers.get(ETAG);
 
     let accept_ranges =
         headers
@@ -62,12 +67,6 @@ pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
                 "Server does not include Accept-Ranges header".to_owned(),
             )))?;
 
-    if accept_ranges == "none" {
-        return Err(Box::new(FetchError::ServerSupportError(
-            "Server's Accept-Ranges header set to none".to_owned(),
-        )));
-    }
-
     let content_length = headers
         .get(CONTENT_LENGTH)
         .ok_or(Box::new(FetchError::ServerSupportError(
@@ -75,6 +74,14 @@ pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
         )))?
         .to_str()?
         .parse::<u64>()?;
+
+    info!(options.logger, "head"; "accept_ranges" => format!("{:?}", &accept_ranges), "content_length" => content_length, "etag" => format!("{:?}", &etag_header_option));
+
+    if accept_ranges == "none" {
+        return Err(Box::new(FetchError::ServerSupportError(
+            "Server's Accept-Ranges header set to none".to_owned(),
+        )));
+    }
 
     let mut fetches = Vec::new();
 
@@ -92,7 +99,17 @@ pub async fn fetch(options: FetchOptions) -> Result<(), Box<dyn Error>> {
 
     try_join_all(fetches).await?;
 
-    Ok(())
+    if options.check_etag {
+        if let Some(etag) = etag_header_option {
+            check_etag(&etag.to_str()?.replace("\"", ""), &path)
+        } else {
+            Err(Box::new(FetchError::ServerSupportError(
+                "Server did not include ETag header".to_owned(),
+            )))
+        }
+    } else {
+        Ok(())
+    }
 }
 
 async fn fetch_range(

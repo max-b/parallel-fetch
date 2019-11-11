@@ -8,6 +8,8 @@ pub enum FetchError {
     ServerSupportError(String),
     /// Invalid Arguments
     InvalidArgumentsError(String),
+    /// Validation Failure
+    ValidationError(String),
 }
 
 impl fmt::Display for FetchError {
@@ -21,6 +23,7 @@ impl Error for FetchError {
         match self {
             FetchError::ServerSupportError(string) => string,
             FetchError::InvalidArgumentsError(string) => string,
+            FetchError::ValidationError(string) => string,
         }
     }
 
@@ -28,6 +31,7 @@ impl Error for FetchError {
         match self {
             FetchError::ServerSupportError(_) => None,
             FetchError::InvalidArgumentsError(_) => None,
+            FetchError::ValidationError(_) => None,
         }
     }
 }

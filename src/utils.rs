@@ -1,14 +1,33 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
+use hex;
+use md5::{Digest, Md5};
 use reqwest::Url;
 
 use crate::errors::FetchError;
 use crate::fetch::Range;
 
+/// Check a ETag in the form of a md5 hash hex string
+/// against a file at path location
+pub fn check_etag(etag: &str, path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Md5::new();
+    let _n = io::copy(&mut file, &mut hasher)?;
+    let hash = hasher.result();
+    if &hex::decode(&etag)?[..] == &hash[..] {
+        Ok(())
+    } else {
+        Err(Box::new(FetchError::ValidationError(
+            "ETag does not match".to_owned(),
+        )))
+    }
+}
+
 /// Takes an optional output and a url to download from
 /// and returns an output path to write to
-pub fn parse_path(output_option: Option<String>, url: &str) -> Result<PathBuf, Box<dyn Error>> {
+pub fn parse_path(output_option: &Option<String>, url: &str) -> Result<PathBuf, Box<dyn Error>> {
     let parsed_url = Url::parse(url).unwrap();
 
     let segments = parsed_url.path_segments();
@@ -129,7 +148,7 @@ mod tests {
     #[test]
     fn parse_path_with_none_output_option() {
         let url = "https://test.com/big-image.jpg";
-        let path = parse_path(None, url).unwrap();
+        let path = parse_path(&None, url).unwrap();
 
         assert_eq!(path, PathBuf::from("./big-image.jpg"));
     }
@@ -137,7 +156,7 @@ mod tests {
     #[test]
     fn parse_path_with_none_output_option_and_no_url_filename() {
         let url = "https://test.com/";
-        let path = parse_path(None, url).unwrap();
+        let path = parse_path(&None, url).unwrap();
 
         assert_eq!(path, PathBuf::from("./index.html"));
     }
@@ -147,7 +166,7 @@ mod tests {
         let url = "https://test.com/";
         // I posit this will never exist on a test environment
         let output_option = Some("/tmp/fake/fake/fake/fake".to_owned());
-        let path = parse_path(output_option, url);
+        let path = parse_path(&output_option, url);
 
         let error = path.expect_err("testing");
         assert_eq!(error.description(), "Output argument invalid".to_owned(),);
@@ -157,7 +176,7 @@ mod tests {
     fn parse_path_with_output_option_dir() {
         let url = "https://test.com/big-image.jpg";
         let output_option = Some("/tmp".to_owned());
-        let path = parse_path(output_option, url).unwrap();
+        let path = parse_path(&output_option, url).unwrap();
 
         assert_eq!(path, PathBuf::from("/tmp/big-image.jpg"));
     }
@@ -166,7 +185,7 @@ mod tests {
     fn parse_path_with_output_option_file() {
         let url = "https://test.com/big-image.jpg";
         let output_option = Some("/tmp/my-big-image.jpg".to_owned());
-        let path = parse_path(output_option, url).unwrap();
+        let path = parse_path(&output_option, url).unwrap();
 
         assert_eq!(path, PathBuf::from("/tmp/my-big-image.jpg"));
     }
