@@ -17,3 +17,7 @@ futures = "0.3.1"
 futures-util = "0.3.1"
 sloggers = "0.3.4"
 slog = "2.5.2"
+
+[dev-dependencies]
+tempfile = "3.0.7"
+mockito = "0.21.0"

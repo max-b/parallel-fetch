@@ -95,7 +95,11 @@ mod tests {
     #[test]
     fn range_with_0_chunks() {
         let ranges = create_ranges(100, 0);
-        assert!(ranges.is_err());
+        let error = ranges.expect_err("testing");
+        assert_eq!(
+            error.description(),
+            "Number of fetches must be greater than zero".to_owned(),
+        );
     }
 
     #[test]
@@ -145,7 +149,8 @@ mod tests {
         let output_option = Some("/tmp/fake/fake/fake/fake".to_owned());
         let path = parse_path(output_option, url);
 
-        assert!(path.is_err());
+        let error = path.expect_err("testing");
+        assert_eq!(error.description(), "Output argument invalid".to_owned(),);
     }
 
     #[test]

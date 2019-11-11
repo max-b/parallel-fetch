@@ -144,12 +144,6 @@ async fn fetch_range(
         )))?
         .to_str()?;
 
-    if content_range != format!("bytes {}-{}/{}", range.start, range.end, total_length) {
-        return Err(Box::new(FetchError::ServerSupportError(
-            "Range response Content-Range headers did not match expected".to_owned(),
-        )));
-    }
-
     let content_length = res_headers
         .get(CONTENT_LENGTH)
         .ok_or(Box::new(FetchError::ServerSupportError(
@@ -158,13 +152,19 @@ async fn fetch_range(
         .to_str()?
         .parse::<u64>()?;
 
+    info!(logger, "received"; "range" => &range, "content_range" => &content_range, "content_length" => content_length, "status" => format!("{}", res.status()));
+
+    if content_range != format!("bytes {}-{}/{}", range.start, range.end, total_length) {
+        return Err(Box::new(FetchError::ServerSupportError(
+            "Range response Content-Range headers did not match expected".to_owned(),
+        )));
+    }
+
     if content_length - 1 != range.end - range.start {
         return Err(Box::new(FetchError::ServerSupportError(
             "Range response Content-Length was incorrect".to_owned(),
         )));
     }
-
-    info!(logger, "received"; "range" => &range, "content_range" => &content_range, "content_length" => content_length, "status" => format!("{}", res.status()));
 
     while let Some(chunk) = res.chunk().await? {
         writer.write(&chunk).await?;

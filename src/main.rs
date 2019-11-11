@@ -11,7 +11,7 @@ use parallel_fetch::{fetch, FetchOptions};
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
     let mut builder = TerminalLoggerBuilder::new();
-    builder.level(Severity::Debug);
+    builder.level(Severity::Info);
 
     let logger = builder.build().unwrap();
     info!(logger, "starting"; "version" => env!("CARGO_PKG_VERSION"));
